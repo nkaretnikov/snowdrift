@@ -21,6 +21,7 @@ module Model.Project
     , fetchProjectTicketUnclaimingEventsBeforeDB
     , fetchProjectWikiPageByNameDB
     , insertProjectPledgeDB
+    , fetchProjectLogoDB
     -- TODO(mitchell): rename all these... prefix fetch, suffix DB
     , getGithubIssues
     , getProjectPages
@@ -73,6 +74,7 @@ data UpdateProject = UpdateProject
     , updateProjectDescription :: Markdown
     , updateProjectTags        :: [Text]
     , updateProjectGithubRepo  :: Maybe Text
+    , updateProjectLogo        :: Maybe Text
     } deriving Show
 
 newtype TaggedTicket = TaggedTicket ((Entity Ticket), [AnnotatedTag])
@@ -501,3 +503,12 @@ fetchProjectOpenTicketsDB project_id muser_id = do
             c ^. CommentDiscussion `in_` valList discussion_ids &&.
             exprCommentOpen c
         return t
+
+-- This function determines if there is a logo affiliated with the project.
+-- If so, it returns the image name of the logo.
+-- If not, it returns the image name "DefaultLogo"
+-- Note: At this time, it assumes there is a DefaultLogo.  We will need to
+--       somehow ensure that there is a DefaultLogo.
+fetchProjectLogoDB :: Maybe Text -> Text
+fetchProjectLogoDB logo = fromMaybe "DefaultLogo" logo
+

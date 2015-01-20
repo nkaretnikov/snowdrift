@@ -192,8 +192,17 @@ projectDiscussionPage project_handle widget = do
 
 getProjectsR :: Handler Html
 getProjectsR = do
-    projects <- runDB fetchPublicProjectsDB
-    defaultLayout $ do
+    project_pledges <- runDB $ do
+        projects <- fetchPublicProjectsDB
+        project_pledges <- mapM (\p -> (p,) <$> fetchProjectPledgesDB (entityKey p)) projects
+        return project_pledges
+
+    projectsummaries <- forM project_pledges $ \(project, pledges) ->
+         runDB $ summarizeProject project pledges
+
+    project_summaries <- M.fromList projectsummaries
+
+    defaultLayout $ do    
         setTitle "Projects | Snowdrift.coop"
         $(widgetFile "projects")
 
@@ -206,7 +215,7 @@ getProjectR project_handle = do
 
     (project_id, project, is_watching, pledges, pledge) <- runYDB $ do
         Entity project_id project <- getBy404 $ UniqueProjectHandle project_handle
-        pledges <- getProjectShares project_id
+        pledges <- fetchProjectSharesDB project_id  -- getProjectShares project_id
         (pledge, is_watching) <- case mviewer_id of
             Nothing -> return (Nothing, False)
             Just viewer_id -> (,)
@@ -327,7 +336,8 @@ getProjectPledgeButtonR :: Text -> Handler TypedContent
 getProjectPledgeButtonR project_handle = do
    pledges <- runYDB $ do
         Entity project_id _project <- getBy404 $ UniqueProjectHandle project_handle
-        getProjectShares project_id
+        fetchProjectSharesDB project_id
+--        getProjectShares project_id
 
    let png = overlayImage blankPledgeButton $
         fillInPledgeCount (fromIntegral (length pledges))

@@ -199,7 +199,8 @@ getProjectsR = do
             summary <- summarizeProject project pledges
             return (project, summary)
 
-    let sharesCount = getCount . summaryShares
+    -- let sharesCount = getCount . summaryShares
+    -- let discussionsCount = getCount . fetchProjectDiscussionsDB
     defaultLayout $ do
         setTitle "Projects | Snowdrift.coop"
         $(widgetFile "projects")

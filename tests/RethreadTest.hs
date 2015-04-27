@@ -61,6 +61,7 @@ rethreadSpecs app = yit "rethreading" $ testSDB app $ [marked|
     lift $ errorUnlessParentDepthDiscussion comment1 (Just comment3) 1 discussion_id
     lift $ errorUnlessParentDepthDiscussion comment4 Nothing         0 discussion_id
     lift $ errorUnlessParentDepthDiscussion comment5 Nothing         0 discussion_id
+    lift $ errorUnlessParentDepthDiscussion comment6 Nothing         0 discussion_id
     lift $ errorUnlessCommentRethreaded comment1 Nothing (Just comment3) user_id
     lift $ errorUnlessDifferentRethreadCount 1
     lift $ errorUnlessDifferentCommentAncestorCount' 1

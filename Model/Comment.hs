@@ -835,7 +835,7 @@ rethreadCommentDB mnew_parent_id' new_discussion_id' root_comment_id' user_id'
                 Nothing            -> return []
                 Just new_parent_id ->
                     fetchCommentAncestorsDB new_parent_id >>=
-                        return . filter (/= root_comment_id) . (new_parent_id :)
+                        return . (new_parent_id :)
         mold_parent_id <- lift $ do
             mroot_comment <- get root_comment_id
             return $ join $ F.forM mroot_comment commentParent

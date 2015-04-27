@@ -318,7 +318,7 @@ Comment
     approvedBy  UserId       Maybe
 
     discussion  DiscussionId
-    parent      CommentId    Maybe
+    parent      CommentId    Maybe  -- current parent
     user        UserId
     text        Markdown
     depth       Int
@@ -375,15 +375,10 @@ CommentFlaggingReason
 Rethread
     ts         UTCTime                     -- Timestamp.
     moderator  UserId                      -- The moderator that rethreaded.
-    oldComment CommentId                   -- The old comment that was rethreaded.
-    newComment CommentId
+    comment    CommentId                   -- This comment was rethreaded
+    oldParent  CommentId Maybe             -- from this parent
+    newParent  CommentId Maybe             -- to this one.
     reason     Text                        -- The reason for rethreading.
-
--- An individual comment-rethread relation.
-CommentRethread
-    rethread   RethreadId
-    oldComment CommentId
-    newComment CommentId
 
 Tag
     name      Text

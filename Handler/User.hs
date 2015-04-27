@@ -535,6 +535,8 @@ getUserPledgesR user_id = do
 -- /#UserId/t
 
 getUserTicketsR :: UserId -> Handler Html
+getUserTicketsR = undefined
+{-
 getUserTicketsR user_id = do
     user <- runYDB $ get404 user_id
     mviewer_id <- maybeAuthId
@@ -598,6 +600,7 @@ getUserTicketsR user_id = do
             userDisplayName (Entity user_id user) <> " | Snowdrift.coop"
 
         $(widgetFile "user_tickets")
+-}
 
 --------------------------------------------------------------------------------
 -- /#UserId/user-notifications

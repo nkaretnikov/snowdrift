@@ -20,7 +20,8 @@ getEventCommentPendingR :: EventCommentPendingId -> Handler ()
 getEventCommentPendingR = redirectCommentEvent get404 eventCommentPendingComment
 
 getEventCommentRethreadedR :: EventCommentRethreadedId -> Handler ()
-getEventCommentRethreadedR = redirectCommentEvent (get404 >=> eventCommentRethreadedRethread >>> get404) rethreadNewComment
+getEventCommentRethreadedR = undefined
+-- getEventCommentRethreadedR = redirectCommentEvent (get404 >=> eventCommentRethreadedRethread >>> get404) rethreadNewComment
 
 getEventCommentClosingR :: EventCommentClosingId -> Handler ()
 getEventCommentClosingR = redirectCommentEvent (get404 >=> eventCommentClosingCommentClosing >>> get404) commentClosingComment

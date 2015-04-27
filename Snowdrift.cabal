@@ -385,6 +385,7 @@ test-suite test
                  , directory
                  , filepath
                  , process >= 1.2.0.0
+                 , resourcet
                  , text
                  , hspec
                  , network-uri

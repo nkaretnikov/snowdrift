@@ -56,6 +56,8 @@ exprCommentOnWikiPage :: SqlExpr (Entity Comment) -> SqlExpr (Entity WikiPage) -
 exprCommentOnWikiPage c wp = c ^. CommentDiscussion ==. wp ^. WikiPageDiscussion
 
 exprCommentNotRethreaded :: ExprCommentCond
+exprCommentNotRethreaded = undefined
+{-
 exprCommentNotRethreaded c = c ^. CommentId `notIn` rethreadedCommentIds
   where
     rethreadedCommentIds :: SqlExpr (ValueList CommentId)
@@ -63,6 +65,7 @@ exprCommentNotRethreaded c = c ^. CommentId `notIn` rethreadedCommentIds
         subList_select $
         from $ \r ->
         return (r ^. RethreadOldComment)
+-}
 
 exprCommentApproved :: ExprCommentCond
 exprCommentApproved = not_ . exprCommentUnapproved

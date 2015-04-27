@@ -128,6 +128,8 @@ renderCommentPendingEvent comment_id comment user_map = do
     |]
 
 renderCommentRethreadedEvent :: Rethread -> UserMap -> Widget
+renderCommentRethreadedEvent Rethread{..} user_map = undefined
+{-
 renderCommentRethreadedEvent Rethread{..} user_map = do
     langs <- handlerToWidget getLanguages
 
@@ -147,6 +149,7 @@ renderCommentRethreadedEvent Rethread{..} user_map = do
             <a href=@{new_route}>@{new_route}#
             : #{rethreadReason}
     |]
+-}
 
 renderCommentClosedEvent :: CommentClosing -> UserMap -> Map CommentId (Entity Ticket) -> Widget
 renderCommentClosedEvent CommentClosing{..} user_map ticket_map = do

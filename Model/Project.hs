@@ -307,6 +307,8 @@ fetchProjectCommentPostedEventsIncludingRethreadedBeforeDB project_id muser_id b
 
 -- | Get all Rethreads whose *destinations* are on the given Project.
 fetchProjectCommentRethreadEventsBeforeDB :: ProjectId -> Maybe UserId -> UTCTime -> Int64 -> DB [(EventCommentRethreadedId, Entity Rethread)]
+fetchProjectCommentRethreadEventsBeforeDB = undefined
+{-
 fetchProjectCommentRethreadEventsBeforeDB project_id muser_id before lim = fetchProjectDiscussionsDB project_id >>= \ project_discussions ->
     fmap unwrapValues $ select $ from $ \ (ecr `InnerJoin` r `InnerJoin` c) -> do
         on_ $ r ^. RethreadNewComment ==. c ^. CommentId
@@ -317,6 +319,7 @@ fetchProjectCommentRethreadEventsBeforeDB project_id muser_id before lim = fetch
         orderBy [ desc $ ecr ^. EventCommentRethreadedTs, desc $ ecr ^. EventCommentRethreadedId ]
         limit lim
         return (ecr ^. EventCommentRethreadedId, r)
+-}
 
 -- | Get all Closings for comments on the current project
 fetchProjectCommentClosingEventsBeforeDB :: ProjectId -> Maybe UserId -> UTCTime -> Int64 -> DB [(EventCommentClosingId, Entity CommentClosing)]
@@ -500,6 +503,8 @@ fetchProjectWikiPageByNameDB project_handle language target = runMaybeT $ do
     return $ Entity (wikiTargetPage wiki_target) wiki_page
 
 fetchProjectOpenTicketsDB :: ProjectId -> Maybe UserId -> DB [TaggedTicket]
+fetchProjectOpenTicketsDB = undefined
+{-
 fetchProjectOpenTicketsDB project_id muser_id = do
     tickets <- fetchProjectDiscussionsDB project_id >>= fetch_tickets
     annot_tags_map <- fetchCommentCommentTagsInDB (map (ticketComment . entityVal . fst) tickets) >>= buildAnnotatedCommentTagsDB muser_id
@@ -523,3 +528,4 @@ fetchProjectOpenTicketsDB project_id muser_id = do
                  where_ $ val (ticketComment ticket) ==. tc ^. TicketClaimingTicket
                  return tc
             return $ if c == 0 then (t, False) else (t, True)
+-}

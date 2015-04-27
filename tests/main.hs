@@ -16,6 +16,7 @@ import NotifyTest
 import DiscussionTest
 import WikiTest
 import BlogTest
+import RethreadTest
 
 import TestHandler
 import Model.Markdown
@@ -57,8 +58,10 @@ spec foundation file =
                     _ -> False
 
         yesodSpec foundation $ do
-            userSpecs
-            notifySpecs (settings foundation) file
-            wikiSpecs
-            blogSpecs
-            discussionSpecs
+            -- userSpecs
+            -- notifySpecs (settings foundation) file
+            -- wikiSpecs
+            -- blogSpecs
+            -- discussionSpecs
+            rethreadSpecs foundation
+            return ()           -- XXX: uncomment back

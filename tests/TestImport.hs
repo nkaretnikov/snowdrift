@@ -43,7 +43,7 @@ import Data.String
 
 import Data.Text.Encoding (decodeUtf8)
 import Foundation as TestImport
-import Model as TestImport hiding (notificationContent)
+import Model as TestImport hiding (notificationContent, rethreadComment)
 
 import Control.Applicative ((<$>))
 import Control.Concurrent (threadDelay)

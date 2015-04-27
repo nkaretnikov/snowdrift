@@ -77,7 +77,6 @@ import           Model.Discussion
 import           Model.Notification
 import           Model.User.Internal (sendPreferredNotificationDB)
 
-import qualified Control.Monad.State                  as State
 import           Control.Monad.Writer.Strict          (tell)
 import           Data.Foldable                        (Foldable)
 import qualified Data.Foldable                        as F
@@ -86,8 +85,8 @@ import qualified Data.Map                             as M
 import           Data.Maybe                           (fromJust)
 import qualified Data.Set                             as S
 import qualified Data.Text                            as T
+import qualified Data.Traversable                     as F
 import           Data.Tree
-import           Database.Esqueleto.Internal.Language (Insertion)
 import qualified Database.Persist                     as P
 import           GHC.Exts                             (IsList(..))
 import qualified Prelude                              as Prelude
@@ -640,11 +639,14 @@ fetchCommentFlaggingDB = getBy . UniqueCommentFlagging
 
 -- | Get the CommentId this CommentId was rethreaded to, if it was.
 fetchCommentRethreadDB :: CommentId -> DB (Maybe CommentId)
+fetchCommentRethreadDB = undefined
+{-
 fetchCommentRethreadDB comment_id = fmap unValue . listToMaybe <$> (
     select $
     from $ \cr -> do
     where_ $ cr ^. CommentRethreadOldComment ==. val comment_id
     return $ cr ^. CommentRethreadNewComment)
+-}
 
 -- | Get a Comment's CommentTags.
 fetchCommentCommentTagsDB :: CommentId -> DB [CommentTag]
@@ -666,8 +668,6 @@ fetchCommentAllCurrentDescendantsDB :: CommentId -> DB [CommentId]
 fetchCommentAllCurrentDescendantsDB comment_id = fmap (map unValue) $
     select $ from $ \ ca -> do
         where_ $ ca ^. CommentAncestorAncestor ==. val comment_id
-            &&. ca ^. CommentAncestorComment `notIn` (subList_select $ from $ return . (^. CommentRethreadOldComment))
-        orderBy [asc (ca ^. CommentAncestorComment)]
         return (ca ^. CommentAncestorComment)
 
 -- | Get a Comment's descendants' ids (don't filter hidden or unapproved comments).
@@ -812,138 +812,64 @@ makeWatchMapDB comment_ids = fmap (M.fromListWith mappend . map (\(Value x, Enti
 
     return $ ancestral_watches <> current_watches
 
-rethreadCommentDB :: Maybe CommentId -> DiscussionId -> CommentId -> UserId -> Text -> Int -> SDB ()
-rethreadCommentDB mnew_parent_id new_discussion_id root_comment_id user_id reason depth_offset = do
-    (old_comment_ids, new_comment_ids) <- lift $ do
-        descendants_ids <- fetchCommentAllCurrentDescendantsDB root_comment_id
-        let old_comment_ids = root_comment_id : descendants_ids
+-- XXX: When fetching descendants or ancestors, it might be necessary
+-- to sort by 'depth'.
+rethreadCommentDB :: Maybe CommentId -> DiscussionId -> CommentId -> UserId
+                  -> Text -> Int -> SDB (Either Text ())
+rethreadCommentDB mnew_parent_id' new_discussion_id' root_comment_id' user_id'
+                  reason' depth_offset' = do
+    descendants_ids <-
+        lift $ fetchCommentAllCurrentDescendantsDB root_comment_id'
+    if mnew_parent_id' `elem` (Just <$> descendants_ids)
+        then return $ Left "cannot rethread a comment below its own replies"
+        else Right <$>
+             go descendants_ids mnew_parent_id' new_discussion_id'
+                 root_comment_id' user_id' reason' depth_offset'
+  where
+    go :: [CommentId] -> Maybe CommentId -> DiscussionId -> CommentId -> UserId
+       -> Text -> Int -> SDB ()
+    go descendants_ids mnew_parent_id new_discussion_id root_comment_id user_id
+       reason depth_offset = do
+        ancestors_ids <-
+            lift $ case mnew_parent_id of
+                Nothing            -> return []
+                Just new_parent_id ->
+                    fetchCommentAncestorsDB new_parent_id >>=
+                        return . filter (/= root_comment_id) . (new_parent_id :)
+        mold_parent_id <- lift $ do
+            mroot_comment <- get root_comment_id
+            return $ join $ F.forM mroot_comment commentParent
 
-        new_comment_ids <- flip State.evalStateT mempty $ forM old_comment_ids $ \comment_id -> do
-            rethread_map <- State.get
+        rethreadComment mnew_parent_id mold_parent_id root_comment_id
+            user_id reason
+        updateComment mnew_parent_id new_discussion_id root_comment_id
+            depth_offset
+        updateCommentAncestors root_comment_id ancestors_ids
 
-            Just comment <- lift $ get comment_id
+        unless (null descendants_ids) $
+            go (Prelude.tail descendants_ids) (Just root_comment_id)
+                new_discussion_id (Prelude.head descendants_ids) user_id
+                reason depth_offset
 
-            let new_parent_id = maybe mnew_parent_id Just $ M.lookup (commentParent comment) rethread_map
+    rethreadComment mnew_parent_id mold_parent_id root_comment_id
+                    user_id reason = do
+        now <- liftIO getCurrentTime
+        let rethread = Rethread now user_id root_comment_id mold_parent_id
+                                mnew_parent_id reason
+        rethread_id <- lift $ insert rethread
+        tell [ECommentRethreaded rethread_id rethread]
 
-            new_comment_id <- lift $ insert $ comment
-                { commentDepth      = commentDepth comment - depth_offset
-                , commentParent     = new_parent_id
-                , commentDiscussion = new_discussion_id
-                }
+    updateComment mnew_parent_id new_discussion_id root_comment_id
+                  depth_offset = lift $ update $ \c -> do
+        set c [ CommentDepth      -=. val depth_offset -- minus is intentional
+              , CommentParent      =. val mnew_parent_id
+              , CommentDiscussion  =. val new_discussion_id ]
+        where_ $ c ^. CommentId ==. val root_comment_id
 
-            State.put $ M.insert (Just comment_id) new_comment_id rethread_map
-
-            return new_comment_id
-
-        return (old_comment_ids, new_comment_ids)
-
-    now <- liftIO getCurrentTime
-
-    let new_root_comment_id = Prelude.head new_comment_ids -- This is kind of ugly, but it should be safe.
-        rethread = Rethread now user_id root_comment_id new_root_comment_id reason
-    rethread_id <- lift (insert rethread)
-    tell [ECommentRethreaded rethread_id rethread]
-
-    let updateForRethread :: (PersistEntity val, PersistEntityBackend val ~ SqlBackend)
-                          => EntityField val CommentId
-                          -> (SqlExpr (Entity val) -> SqlExpr (Entity CommentRethread) -> SqlExpr (Insertion val))
-                          -> DB ()
-        updateForRethread comment_field constructor =
-            insertSelect $
-            from $ \(table `InnerJoin` cr) -> do
-            on_ (table ^. comment_field ==. cr ^. CommentRethreadOldComment)
-            where_ (table ^. comment_field `in_` valList old_comment_ids)
-            return (constructor table cr)
-
-    lift $ do
-        forM_ (zip old_comment_ids new_comment_ids) $ \(old_comment_id, new_comment_id) -> do
-            insert_ (CommentRethread rethread_id old_comment_id new_comment_id)
-
-            -- TODO(mitchell, david): pull the stuff below out of the for-loop
-
-            insertSelect $
-             from $ \(c `InnerJoin` ca) -> do
-             on_ (c ^. CommentParent ==. just (ca ^. CommentAncestorComment))
-             where_ (c ^. CommentId ==. val new_comment_id)
-             return (CommentAncestor <# val new_comment_id <&> (ca ^. CommentAncestorAncestor))
-
-            [Value maybe_new_parent_id] <-
-                select $
-                from $ \c -> do
-                where_ (c ^. CommentId ==. val new_comment_id)
-                return (c ^. CommentParent)
-
-            maybe (return ()) (insert_ . CommentAncestor new_comment_id) maybe_new_parent_id
-
-        -- EVERYTHING with a foreign key on CommentId needs to be added here, for the
-        -- new comments. We don't want to update in-place because we *do* show the
-        -- rethreaded comments on Project feeds (for one thing).
-
-        updateForRethread CommentClosingComment
-                          (\cc cr -> CommentClosing
-                              <#  (cc  ^. CommentClosingTs)
-                              <&> (cc  ^. CommentClosingClosedBy)
-                              <&> (cc  ^. CommentClosingReason)
-                              <&> (cr  ^. CommentRethreadNewComment))
-
-        updateForRethread CommentFlaggingComment
-                          (\cf cr -> CommentFlagging
-                              <#  (cf  ^. CommentFlaggingTs)
-                              <&> (cf  ^. CommentFlaggingFlagger)
-                              <&> (cr  ^. CommentRethreadNewComment)
-                              <&> (cf  ^. CommentFlaggingMessage))
-
-        updateForRethread CommentRetractingComment
-                          (\r cr -> CommentRetracting
-                              <#  (r   ^. CommentRetractingTs)
-                              <&> (r   ^. CommentRetractingReason)
-                              <&> (cr  ^. CommentRethreadNewComment))
-
-        updateForRethread CommentTagComment
-                          (\ct cr -> CommentTag
-                              <#  (cr  ^. CommentRethreadNewComment)
-                              <&> (ct  ^. CommentTagTag)
-                              <&> (ct  ^. CommentTagUser)
-                              <&> (ct  ^. CommentTagCount))
-
-        updateForRethread TicketComment
-                          (\t cr -> Ticket
-                              <#  (t   ^. TicketCreatedTs)
-                              <&> (t   ^. TicketUpdatedTs)
-                              <&> (t   ^. TicketName)
-                              <&> (cr  ^. CommentRethreadNewComment))
-
-        updateForRethread TicketClaimingTicket
-                          (\tc cr -> TicketClaiming
-                              <#  (tc  ^. TicketClaimingTs)
-                              <&> (tc  ^. TicketClaimingUser)
-                              <&> (cr  ^. CommentRethreadNewComment)
-                              <&> (tc  ^. TicketClaimingNote))
-
-        updateForRethread TicketOldClaimingTicket
-                          (\toc cr -> TicketOldClaiming
-                              <#  (toc  ^. TicketOldClaimingClaimTs)
-                              <&> (toc  ^. TicketOldClaimingUser)
-                              <&> (cr   ^. CommentRethreadNewComment)
-                              <&> (toc  ^. TicketOldClaimingNote)
-                              <&> (toc  ^. TicketOldClaimingReleaseNote)
-                              <&> (toc  ^. TicketOldClaimingReleasedTs))
-
-        updateForRethread UnapprovedCommentNotificationComment
-                          (\ucn cr -> UnapprovedCommentNotification
-                              <#  (cr  ^. CommentRethreadNewComment)
-                              <&> (ucn ^. UnapprovedCommentNotificationNotification))
-
-        updateForRethread ViewCommentComment
-                          (\vc cr -> ViewComment
-                              <#  (vc  ^. ViewCommentUser)
-                              <&> (cr  ^. CommentRethreadNewComment))
-
-        updateForRethread WatchedSubthreadRoot
-                          (\ws cr -> WatchedSubthread
-                              <#  (ws ^. WatchedSubthreadTs)
-                              <&> (ws ^. WatchedSubthreadUser)
-                              <&> (cr ^. CommentRethreadNewComment))
+    updateCommentAncestors root_comment_id ancestors_ids = lift $ do
+        delete $ from $ \ca ->
+            where_ $ ca ^. CommentAncestorComment ==. val root_comment_id
+        F.forM_ ancestors_ids $ insert_ . CommentAncestor root_comment_id
 
 fetchCommentTicketsDB :: Set CommentId -> DB (Map CommentId (Entity Ticket))
 fetchCommentTicketsDB comment_ids = do

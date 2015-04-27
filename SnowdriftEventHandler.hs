@@ -91,6 +91,8 @@ notificationEventHandler AppConfig{..} (ECommentApproved comment_id comment) = r
         ]
 
 -- Notify the rethreadee his/her comment has been rethreaded.
+notificationEventHandler AppConfig{..} (ECommentRethreaded _ Rethread{..}) = undefined
+{-
 notificationEventHandler AppConfig{..} (ECommentRethreaded _ Rethread{..}) = do
     (comment, Just old_route, Just new_route) <- runDB $ (,,)
         <$> getJust rethreadOldComment
@@ -113,6 +115,7 @@ notificationEventHandler AppConfig{..} (ECommentRethreaded _ Rethread{..}) = do
 
     runSDB $ sendPreferredNotificationDB (commentUser comment)
         NotifRethreadedComment Nothing Nothing content
+-}
 
 notificationEventHandler _ (ECommentClosed _ _)     = return ()
 notificationEventHandler _ (ENotificationSent _ _)  = return ()

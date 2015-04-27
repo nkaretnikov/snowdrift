@@ -1,0 +1,4 @@
+-- XXX: Do not drop anything silently; write a proper migration file.
+ALTER TABLE "rethread" DROP COLUMN "old_comment";
+ALTER TABLE "rethread" DROP COLUMN "new_comment";
+DROP TABLE "comment_rethread";

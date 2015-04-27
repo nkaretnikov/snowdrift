@@ -45,6 +45,10 @@ rethreadSpecs app = yit "rethreading" $ testSDB app $ [marked|
         comment4 = comment_id4 comment_ids
         comment5 = comment_id5 comment_ids
         comment6 = comment_id6 comment_ids
+    comment_ancestor_count <- lift selectCommentAncestorCount
+    let errorUnlessDifferentCommentAncestorCount' c =
+            errorUnlessDifferentCommentAncestorCount $
+                comment_ancestor_count + c
     -- comment2
     -- comment3
     -- `-comment1
@@ -59,6 +63,7 @@ rethreadSpecs app = yit "rethreading" $ testSDB app $ [marked|
     lift $ errorUnlessParentDepthDiscussion comment5 Nothing         0 discussion_id
     lift $ errorUnlessCommentRethreaded comment1 Nothing (Just comment3) user_id
     lift $ errorUnlessDifferentRethreadCount 1
+    lift $ errorUnlessDifferentCommentAncestorCount' 1
     -- comment2
     -- comment4
     -- `-comment3
@@ -74,6 +79,7 @@ rethreadSpecs app = yit "rethreading" $ testSDB app $ [marked|
     lift $ errorUnlessParentDepthDiscussion comment6 Nothing         0 discussion_id
     lift $ errorUnlessCommentRethreaded comment3 Nothing (Just comment4) user_id
     lift $ errorUnlessDifferentRethreadCount 3
+    lift $ errorUnlessDifferentCommentAncestorCount' 3
     -- This is the requested change:
     --
     -- comment2
@@ -101,6 +107,7 @@ rethreadSpecs app = yit "rethreading" $ testSDB app $ [marked|
     lift $ errorUnlessParentDepthDiscussion comment6 Nothing         0 discussion_id
     -- 'errorUnlessCommentRethreaded' omitted on purpose.
     lift $ errorUnlessDifferentRethreadCount 3
+    lift $ errorUnlessDifferentCommentAncestorCount' 3
     -- comment1
     -- comment2
     -- comment4
@@ -116,6 +123,7 @@ rethreadSpecs app = yit "rethreading" $ testSDB app $ [marked|
     lift $ errorUnlessParentDepthDiscussion comment6 Nothing         0 discussion_id
     lift $ errorUnlessCommentRethreaded comment1 (Just comment3) Nothing user_id
     lift $ errorUnlessDifferentRethreadCount 4
+    lift $ errorUnlessDifferentCommentAncestorCount' 1
     -- comment1
     -- comment2
     -- comment3
@@ -131,6 +139,7 @@ rethreadSpecs app = yit "rethreading" $ testSDB app $ [marked|
     lift $ errorUnlessParentDepthDiscussion comment6 Nothing 0 discussion_id
     lift $ errorUnlessCommentRethreaded comment3 (Just comment4) Nothing user_id
     lift $ errorUnlessDifferentRethreadCount 5
+    lift $ errorUnlessDifferentCommentAncestorCount' 0
     -- Test that a discussion id is being changed on rethreading.
     discussion_id' <- lift createDiscussionDB
     testRight $ rethreadToTopLevel comment2 discussion_id' user_id
@@ -142,6 +151,7 @@ rethreadSpecs app = yit "rethreading" $ testSDB app $ [marked|
     lift $ errorUnlessParentDepthDiscussion comment6 Nothing 0 discussion_id
     lift $ errorUnlessCommentRethreaded comment2 Nothing Nothing user_id
     lift $ errorUnlessDifferentRethreadCount 6
+    lift $ errorUnlessDifferentCommentAncestorCount' 0
     -- Test that a user id is being changed on rethreading.
     let user_id' = key $ PersistInt64 2
     testRight $ rethreadToTopLevel comment4 discussion_id user_id'
@@ -153,6 +163,7 @@ rethreadSpecs app = yit "rethreading" $ testSDB app $ [marked|
     lift $ errorUnlessParentDepthDiscussion comment6 Nothing 0 discussion_id
     lift $ errorUnlessCommentRethreaded comment4 Nothing Nothing user_id'
     lift $ errorUnlessDifferentRethreadCount 7
+    lift $ errorUnlessDifferentCommentAncestorCount' 0
     |]
 
 -- | Since it's easier not to be tied to the actual data in the DB and just
@@ -289,6 +300,23 @@ errorUnlessDifferentRethreadCount count = [marked|
         return ()
     unless (count == count') $ error $
         "expected rethread count " <> pprint count <>
+        ", but got " <> pprint count'
+    |]
+
+selectCommentAncestorCount :: DB Int
+selectCommentAncestorCount = [marked|
+    selectCount $ from $ \ca -> do
+        -- A hint for the typechecker that doesn't require
+        -- 'ScopedTypeVariables', which is not supported by 'marked'.
+        let _ = ca :: SqlExpr (Entity CommentAncestor)
+        return ()
+    |]
+
+errorUnlessDifferentCommentAncestorCount :: Int -> DB ()
+errorUnlessDifferentCommentAncestorCount count = [marked|
+    count' <- selectCommentAncestorCount
+    unless (count == count') $ error $
+        "expected comment_ancestor count " <> pprint count <>
         ", but got " <> pprint count'
     |]
 
